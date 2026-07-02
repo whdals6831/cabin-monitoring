@@ -17,10 +17,15 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   margin: 0;
   min-width: 320px;
-  min-height: 100vh;
   background:
     linear-gradient(90deg, rgba(255, 184, 77, 0.04) 1px, transparent 1px),
     linear-gradient(180deg, rgba(255, 184, 77, 0.04) 1px, transparent 1px),
@@ -39,7 +44,7 @@ select {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 14px;
-  min-height: 100vh;
+  height: 100vh;
   padding: 18px;
 }
 
@@ -130,7 +135,7 @@ h2 {
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1.65fr) minmax(310px, 0.75fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
   min-height: 0;
 }
@@ -141,6 +146,10 @@ h2 {
   min-height: 0;
   padding: 14px;
   overflow: hidden;
+}
+
+.lidar-panel {
+  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
 .panel-head {
@@ -155,7 +164,7 @@ h2 {
   position: relative;
   display: grid;
   place-items: center;
-  min-height: 360px;
+  min-height: 0;
   overflow: hidden;
   border: 1px solid rgba(159, 183, 174, 0.2);
   background: #070908;
@@ -190,33 +199,23 @@ canvas {
   position: absolute;
 }
 
-.lidar-panel {
-  grid-template-rows: auto auto minmax(0, 1fr);
+.roi-scene {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid rgba(159, 183, 174, 0.2);
+  background: #080d0b;
 }
 
-.roi-summary {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 12px;
-  padding: 16px;
-  border: 1px solid rgba(255, 184, 77, 0.28);
-  background: #181f1d;
+.roi-scene canvas {
+  display: block;
 }
 
-.roi-summary strong {
-  color: #ffcf7a;
-  font-size: 58px;
-  line-height: 0.85;
-  font-weight: 900;
-}
-
-.roi-summary span {
-  color: #9fb7ae;
-  font-size: 13px;
-  font-weight: 800;
-  text-transform: uppercase;
+.roi-scene .empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
 }
 
 .roi-list {
@@ -224,7 +223,7 @@ canvas {
   align-content: start;
   gap: 10px;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
   padding-right: 2px;
 }
 
@@ -352,7 +351,7 @@ canvas {
   }
 
   .camera-frame {
-    min-height: 300px;
+    min-height: 0;
   }
 
   .alarm-detail {

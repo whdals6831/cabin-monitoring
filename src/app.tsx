@@ -11,13 +11,14 @@ import { AlarmStrip } from '@/components/alarm-strip';
 import { CameraPanel } from '@/components/camera-panel';
 import { LidarPanel } from '@/components/lidar-panel';
 import type { MonitoringAlarm } from '@/components/alarm-strip';
-import type { RoiAlarmArray } from '@/components/lidar-panel';
+import type { RoiAlarmArray, RoiMarkerArray } from '@/components/lidar-panel';
 
 const BRIDGE_URL = `ws://${window.location.hostname}:8765`;
 const BRIDGE_SUBPROTOCOL = 'foxglove.sdk.v1';
 const TOPICS = {
   camera: '/detections/image',
   lidar: '/lidar/roi_alarm',
+  lidarMarker: '/lidar/roi_marker',
   alarms: '/monitoring/alarms',
 } as const;
 
@@ -47,6 +48,10 @@ function App() {
   const [connection, setConnection] = useState<ConnectionState>('connecting');
   const [imageReceivedAt, setImageReceivedAt] = useState<number | null>(null);
   const [lidar, setLidar] = useState<TopicState<RoiAlarmArray>>({
+    data: null,
+    receivedAt: null,
+  });
+  const [lidarMarker, setLidarMarker] = useState<TopicState<RoiMarkerArray>>({
     data: null,
     receivedAt: null,
   });
@@ -84,6 +89,7 @@ function App() {
       handleMessage(subscription, message, canvasRef.current, {
         setImageReceivedAt,
         setLidar,
+        setLidarMarker,
         setAlarm,
       });
     });
@@ -96,6 +102,7 @@ function App() {
 
   const activeAlarm = alarm.data;
   const roiAlarms = lidar.data?.alarms ?? [];
+  const roiMarkers = lidarMarker.data?.markers ?? [];
 
   return (
     <main className="monitor">
@@ -121,6 +128,7 @@ function App() {
           received={lidar.receivedAt != null}
           receivedLabel={timeLabel(lidar.receivedAt)}
           roiAlarms={roiAlarms}
+          roiMarkers={roiMarkers}
           topic={TOPICS.lidar}
         />
       </section>
@@ -141,6 +149,7 @@ function handleMessage(
   setters: {
     setImageReceivedAt: (time: number) => void;
     setLidar: (state: TopicState<RoiAlarmArray>) => void;
+    setLidarMarker: (state: TopicState<RoiMarkerArray>) => void;
     setAlarm: (state: TopicState<MonitoringAlarm>) => void;
   },
 ) {
@@ -155,6 +164,11 @@ function handleMessage(
 
   if (subscription.topic === TOPICS.lidar) {
     setters.setLidar({ data: decoded as RoiAlarmArray, receivedAt });
+    return;
+  }
+
+  if (subscription.topic === TOPICS.lidarMarker) {
+    setters.setLidarMarker({ data: decoded as RoiMarkerArray, receivedAt });
     return;
   }
 
