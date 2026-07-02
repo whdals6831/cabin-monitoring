@@ -1,6 +1,11 @@
 import { useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { GizmoHelper, GizmoViewport, OrbitControls } from '@react-three/drei';
+import {
+  GizmoHelper,
+  GizmoViewport,
+  Html,
+  OrbitControls,
+} from '@react-three/drei';
 import * as THREE from 'three';
 
 export type RoiAlarm = {
@@ -41,8 +46,9 @@ export type RoiMarkerArray = {
 export type LidarPoint = Vector3Like;
 
 const LIDAR_VIEW = {
-  range: 6,
-  fov: (Math.PI * 2) / 3,
+  range: 50,
+  fov: (Math.PI * 140) / 180,
+  initialRange: 18,
 };
 
 type LidarPanelProps = {
@@ -105,6 +111,7 @@ function RoiScene({
         camera={{
           position: [camera.x, camera.height, camera.z],
           rotation: [-Math.PI / 2, 0, 0],
+          up: [0, 0, 1],
           zoom: camera.zoom,
         }}
       >
@@ -140,7 +147,7 @@ function FovGuide() {
       new THREE.Vector3(0, 0.01, 0),
       guidePoint(LIDAR_VIEW.fov / 2, LIDAR_VIEW.range),
     ]);
-    const rings = [2, 4, 6].map((range) =>
+    const rings = [10, 20, 30, 40, 50].map((range) =>
       new THREE.BufferGeometry().setFromPoints(arcPoints(range)),
     );
     return { edge, rings };
@@ -152,9 +159,14 @@ function FovGuide() {
         <lineBasicMaterial color="#4fa087" transparent opacity={0.62} />
       </lineSegments>
       {geometries.rings.map((geometry, index) => (
-        <lineSegments key={index} geometry={geometry}>
-          <lineBasicMaterial color="#2f6f62" transparent opacity={0.55} />
-        </lineSegments>
+        <group key={index}>
+          <lineSegments geometry={geometry}>
+            <lineBasicMaterial color="#2f6f62" transparent opacity={0.55} />
+          </lineSegments>
+          <Html position={guidePoint(0, (index + 1) * 10)} center>
+            <span className="range-label">{(index + 1) * 10}m</span>
+          </Html>
+        </group>
       ))}
     </group>
   );
@@ -193,9 +205,9 @@ function PointCloud({ points }: { points: LidarPoint[] }) {
 
     for (let i = 0; i < points.length; i += step) {
       const point = points[i];
-      positions[offset] = point.x;
+      positions[offset] = point.y;
       positions[offset + 1] = point.z;
-      positions[offset + 2] = point.y;
+      positions[offset + 2] = point.x;
       offset += 3;
     }
 
@@ -242,7 +254,7 @@ function RoiBox({ marker }: { marker: RoiMarker }) {
   const { position } = marker.pose;
   const { scale } = marker;
   const geometry = useMemo(() => {
-    const box = new THREE.BoxGeometry(scale.x, scale.z, scale.y);
+    const box = new THREE.BoxGeometry(scale.y, scale.z, scale.x);
     return new THREE.EdgesGeometry(box);
   }, [scale.x, scale.y, scale.z]);
   const color = useMemo(
@@ -251,35 +263,35 @@ function RoiBox({ marker }: { marker: RoiMarker }) {
   );
 
   return (
-    <lineSegments
-      geometry={geometry}
-      position={[position.x, position.z, position.y]}
-    >
-      <lineBasicMaterial color={color} />
-    </lineSegments>
+    <group position={[position.y, position.z, position.x]}>
+      <lineSegments geometry={geometry}>
+        <lineBasicMaterial color={color} />
+      </lineSegments>
+      <Html position={[0, scale.z / 2 + 0.12, 0]} center>
+        <span className="roi-measure-label">
+          x {formatMeter(position.x - scale.x / 2)}-
+          {formatMeter(position.x + scale.x / 2)}m · 폭 {formatMeter(scale.y)}m
+        </span>
+      </Html>
+    </group>
   );
 }
 
 function cameraForScene(markers: RoiMarker[], points: LidarPoint[]) {
-  let minX = -Math.sin(LIDAR_VIEW.fov / 2) * LIDAR_VIEW.range;
-  let maxX = Math.sin(LIDAR_VIEW.fov / 2) * LIDAR_VIEW.range;
+  const range =
+    markers.length === 0 && points.length === 0 ? LIDAR_VIEW.initialRange : 1;
+  let minX = -Math.sin(LIDAR_VIEW.fov / 2) * range;
+  let maxX = Math.sin(LIDAR_VIEW.fov / 2) * range;
   let minZ = 0;
-  let maxZ = LIDAR_VIEW.range;
+  let maxZ = range;
 
   for (const marker of markers) {
     const { position } = marker.pose;
     const { scale } = marker;
-    minX = Math.min(minX, position.x - scale.x / 2);
-    maxX = Math.max(maxX, position.x + scale.x / 2);
-    minZ = Math.min(minZ, position.y - scale.y / 2);
-    maxZ = Math.max(maxZ, position.y + scale.y / 2);
-  }
-
-  for (const point of points) {
-    minX = Math.min(minX, point.x);
-    maxX = Math.max(maxX, point.x);
-    minZ = Math.min(minZ, point.y);
-    maxZ = Math.max(maxZ, point.y);
+    minX = Math.min(minX, position.y - scale.y / 2);
+    maxX = Math.max(maxX, position.y + scale.y / 2);
+    minZ = Math.min(minZ, position.x - scale.x / 2);
+    maxZ = Math.max(maxZ, position.x + scale.x / 2);
   }
 
   const width = Math.max(maxX - minX, maxZ - minZ, 1);
@@ -290,6 +302,10 @@ function cameraForScene(markers: RoiMarker[], points: LidarPoint[]) {
     z: (minZ + maxZ) / 2,
     zoom: 110 / width,
   };
+}
+
+function formatMeter(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
 function RoiCard({ roi }: { roi: RoiAlarm }) {
