@@ -109,7 +109,7 @@ function RoiScene({
       <Canvas
         orthographic
         camera={{
-          position: [camera.x, camera.height, camera.z],
+          position: [0, camera.height, 0],
           rotation: [-Math.PI / 2, 0, 0],
           up: [0, 0, 1],
           zoom: camera.zoom,
@@ -118,7 +118,7 @@ function RoiScene({
         <FovGuide />
         <LidarOrigin />
         <PointCloud points={points} />
-        <OrbitControls makeDefault enableDamping={false} />
+        <OrbitControls makeDefault enableDamping={false} target={[0, 0, 0]} />
         <GizmoHelper alignment="bottom-right" margin={[54, 54]}>
           <GizmoViewport
             axisColors={['#ff5c5c', '#23d77a', '#5c8dff']}
