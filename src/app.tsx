@@ -11,7 +11,11 @@ import { AlarmStrip } from '@/components/alarm-strip';
 import { CameraPanel } from '@/components/camera-panel';
 import { LidarPanel } from '@/components/lidar-panel';
 import type { MonitoringAlarm } from '@/components/alarm-strip';
-import type { RoiAlarmArray, RoiMarkerArray } from '@/components/lidar-panel';
+import type {
+  LidarPoint,
+  RoiAlarmArray,
+  RoiMarkerArray,
+} from '@/components/lidar-panel';
 
 const BRIDGE_URL = `ws://${window.location.hostname}:8765`;
 const BRIDGE_SUBPROTOCOL = 'foxglove.sdk.v1';
@@ -19,6 +23,7 @@ const TOPICS = {
   camera: '/detections/image',
   lidar: '/lidar/roi_alarm',
   lidarMarker: '/lidar/roi_marker',
+  lidarPoints: '/lidar/points_preprocessed',
   alarms: '/monitoring/alarms',
 } as const;
 
@@ -29,6 +34,21 @@ type RosImage = {
   height: number;
   encoding: string;
   step: number;
+  data: Uint8Array | number[];
+};
+
+type RosPointField = {
+  name: string;
+  offset: number;
+  datatype: number;
+};
+
+type RosPointCloud2 = {
+  width: number;
+  height: number;
+  is_bigendian: boolean;
+  point_step: number;
+  fields: RosPointField[];
   data: Uint8Array | number[];
 };
 
@@ -52,6 +72,10 @@ function App() {
     receivedAt: null,
   });
   const [lidarMarker, setLidarMarker] = useState<TopicState<RoiMarkerArray>>({
+    data: null,
+    receivedAt: null,
+  });
+  const [lidarPoints, setLidarPoints] = useState<TopicState<LidarPoint[]>>({
     data: null,
     receivedAt: null,
   });
@@ -90,6 +114,7 @@ function App() {
         setImageReceivedAt,
         setLidar,
         setLidarMarker,
+        setLidarPoints,
         setAlarm,
       });
     });
@@ -103,6 +128,7 @@ function App() {
   const activeAlarm = alarm.data;
   const roiAlarms = lidar.data?.alarms ?? [];
   const roiMarkers = lidarMarker.data?.markers ?? [];
+  const points = lidarPoints.data ?? [];
 
   return (
     <main className="monitor">
@@ -127,6 +153,8 @@ function App() {
         <LidarPanel
           received={lidar.receivedAt != null}
           receivedLabel={timeLabel(lidar.receivedAt)}
+          pointCloudLabel={timeLabel(lidarPoints.receivedAt)}
+          points={points}
           roiAlarms={roiAlarms}
           roiMarkers={roiMarkers}
           topic={TOPICS.lidar}
@@ -150,6 +178,7 @@ function handleMessage(
     setImageReceivedAt: (time: number) => void;
     setLidar: (state: TopicState<RoiAlarmArray>) => void;
     setLidarMarker: (state: TopicState<RoiMarkerArray>) => void;
+    setLidarPoints: (state: TopicState<LidarPoint[]>) => void;
     setAlarm: (state: TopicState<MonitoringAlarm>) => void;
   },
 ) {
@@ -169,6 +198,14 @@ function handleMessage(
 
   if (subscription.topic === TOPICS.lidarMarker) {
     setters.setLidarMarker({ data: decoded as RoiMarkerArray, receivedAt });
+    return;
+  }
+
+  if (subscription.topic === TOPICS.lidarPoints) {
+    setters.setLidarPoints({
+      data: pointCloudToPoints(decoded as RosPointCloud2),
+      receivedAt,
+    });
     return;
   }
 
@@ -223,6 +260,62 @@ function drawImage(canvas: HTMLCanvasElement | null, image: RosImage) {
   canvas.width = image.width;
   canvas.height = image.height;
   context.putImageData(new ImageData(rgba, image.width, image.height), 0, 0);
+}
+
+function pointCloudToPoints(cloud: RosPointCloud2) {
+  const x = cloud.fields.find((field) => field.name === 'x');
+  const y = cloud.fields.find((field) => field.name === 'y');
+  const z = cloud.fields.find((field) => field.name === 'z');
+  if (!x || !y || !z || cloud.point_step <= 0) {
+    return [];
+  }
+
+  const source =
+    cloud.data instanceof Uint8Array ? cloud.data : Uint8Array.from(cloud.data);
+  const view = new DataView(
+    source.buffer,
+    source.byteOffset,
+    source.byteLength,
+  );
+  const littleEndian = !cloud.is_bigendian;
+  const count = Math.min(
+    cloud.width * cloud.height,
+    Math.floor(source.length / cloud.point_step),
+  );
+  const points: LidarPoint[] = [];
+
+  for (let i = 0; i < count; i += 1) {
+    const offset = i * cloud.point_step;
+    const point = {
+      x: readPointField(view, offset + x.offset, x.datatype, littleEndian),
+      y: readPointField(view, offset + y.offset, y.datatype, littleEndian),
+      z: readPointField(view, offset + z.offset, z.datatype, littleEndian),
+    };
+    if (
+      Number.isFinite(point.x) &&
+      Number.isFinite(point.y) &&
+      Number.isFinite(point.z)
+    ) {
+      points.push(point);
+    }
+  }
+
+  return points;
+}
+
+function readPointField(
+  view: DataView,
+  offset: number,
+  datatype: number,
+  littleEndian: boolean,
+) {
+  if (datatype === 7) {
+    return view.getFloat32(offset, littleEndian);
+  }
+  if (datatype === 8) {
+    return view.getFloat64(offset, littleEndian);
+  }
+  return NaN;
 }
 
 function isRequiredTopic(

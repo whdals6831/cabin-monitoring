@@ -218,6 +218,18 @@ canvas {
   place-items: center;
 }
 
+.scene-feed {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 6px 8px;
+  border: 1px solid rgba(159, 183, 174, 0.2);
+  background: rgba(8, 13, 11, 0.78);
+  color: #c9d8d2;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .roi-list {
   display: grid;
   align-content: start;

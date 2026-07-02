@@ -38,9 +38,18 @@ export type RoiMarkerArray = {
   markers: RoiMarker[];
 };
 
+export type LidarPoint = Vector3Like;
+
+const LIDAR_VIEW = {
+  range: 6,
+  fov: (Math.PI * 2) / 3,
+};
+
 type LidarPanelProps = {
   receivedLabel: string;
   received: boolean;
+  pointCloudLabel: string;
+  points: LidarPoint[];
   roiAlarms: RoiAlarm[];
   roiMarkers: RoiMarker[];
   topic: string;
@@ -49,6 +58,8 @@ type LidarPanelProps = {
 export function LidarPanel({
   receivedLabel,
   received,
+  pointCloudLabel,
+  points,
   roiAlarms,
   roiMarkers,
   topic,
@@ -62,7 +73,11 @@ export function LidarPanel({
         </div>
         <StatusPill active={received} label={receivedLabel} />
       </div>
-      <RoiScene markers={roiMarkers} />
+      <RoiScene
+        markers={roiMarkers}
+        pointCloudLabel={pointCloudLabel}
+        points={points}
+      />
       <div className="roi-list">
         {roiAlarms.map((roi) => (
           <RoiCard key={roi.name} roi={roi} />
@@ -72,8 +87,16 @@ export function LidarPanel({
   );
 }
 
-function RoiScene({ markers }: { markers: RoiMarker[] }) {
-  const camera = cameraForMarkers(markers);
+function RoiScene({
+  markers,
+  pointCloudLabel,
+  points,
+}: {
+  markers: RoiMarker[];
+  pointCloudLabel: string;
+  points: LidarPoint[];
+}) {
+  const camera = cameraForScene(markers, points);
 
   return (
     <div className="roi-scene">
@@ -85,7 +108,9 @@ function RoiScene({ markers }: { markers: RoiMarker[] }) {
           zoom: camera.zoom,
         }}
       >
-        <gridHelper args={[8, 8, '#345047', '#1d2a26']} />
+        <FovGuide />
+        <LidarOrigin />
+        <PointCloud points={points} />
         <OrbitControls makeDefault enableDamping={false} />
         <GizmoHelper alignment="bottom-right" margin={[54, 54]}>
           <GizmoViewport
@@ -97,11 +122,120 @@ function RoiScene({ markers }: { markers: RoiMarker[] }) {
           <RoiBox key={marker.id} marker={marker} />
         ))}
       </Canvas>
-      {markers.length === 0 ? (
-        <p className="empty">ROI 영역 수신 대기</p>
+      <span className="scene-feed">
+        PCD {pointCloudLabel} · {points.length} pts
+      </span>
+      {markers.length === 0 && points.length === 0 ? (
+        <p className="empty">ROI/PCD 수신 대기</p>
       ) : null}
     </div>
   );
+}
+
+function FovGuide() {
+  const geometries = useMemo(() => {
+    const edge = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0, 0.01, 0),
+      guidePoint(-LIDAR_VIEW.fov / 2, LIDAR_VIEW.range),
+      new THREE.Vector3(0, 0.01, 0),
+      guidePoint(LIDAR_VIEW.fov / 2, LIDAR_VIEW.range),
+    ]);
+    const rings = [2, 4, 6].map((range) =>
+      new THREE.BufferGeometry().setFromPoints(arcPoints(range)),
+    );
+    return { edge, rings };
+  }, []);
+
+  return (
+    <group>
+      <lineSegments geometry={geometries.edge}>
+        <lineBasicMaterial color="#4fa087" transparent opacity={0.62} />
+      </lineSegments>
+      {geometries.rings.map((geometry, index) => (
+        <lineSegments key={index} geometry={geometry}>
+          <lineBasicMaterial color="#2f6f62" transparent opacity={0.55} />
+        </lineSegments>
+      ))}
+    </group>
+  );
+}
+
+function LidarOrigin() {
+  const heading = useMemo(
+    () =>
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0.12, 0),
+        new THREE.Vector3(0, 0.12, 0.55),
+      ]),
+    [],
+  );
+
+  return (
+    <group>
+      <mesh position={[0, 0.08, 0]}>
+        <cylinderGeometry args={[0.14, 0.14, 0.16, 24]} />
+        <meshBasicMaterial color="#f7fffb" />
+      </mesh>
+      <lineSegments geometry={heading}>
+        <lineBasicMaterial color="#f7fffb" />
+      </lineSegments>
+    </group>
+  );
+}
+
+function PointCloud({ points }: { points: LidarPoint[] }) {
+  const geometry = useMemo(() => {
+    const maxPoints = 12000;
+    // ponytail: canvas cap only; raise it when profiling says the browser can afford more.
+    const step = Math.max(1, Math.ceil(points.length / maxPoints));
+    const positions = new Float32Array(Math.ceil(points.length / step) * 3);
+    let offset = 0;
+
+    for (let i = 0; i < points.length; i += step) {
+      const point = points[i];
+      positions[offset] = point.x;
+      positions[offset + 1] = point.z;
+      positions[offset + 2] = point.y;
+      offset += 3;
+    }
+
+    return new THREE.BufferGeometry().setAttribute(
+      'position',
+      new THREE.BufferAttribute(positions, 3),
+    );
+  }, [points]);
+
+  return (
+    <points geometry={geometry}>
+      <pointsMaterial
+        color="#f2d06b"
+        depthTest={false}
+        size={2}
+        sizeAttenuation={false}
+      />
+    </points>
+  );
+}
+
+function guidePoint(angle: number, range: number) {
+  return new THREE.Vector3(
+    Math.sin(angle) * range,
+    0.01,
+    Math.cos(angle) * range,
+  );
+}
+
+function arcPoints(range: number) {
+  const points: THREE.Vector3[] = [];
+  const segments = 40;
+  let previous = guidePoint(-LIDAR_VIEW.fov / 2, range);
+  for (let i = 1; i <= segments; i += 1) {
+    const angle = -LIDAR_VIEW.fov / 2 + (LIDAR_VIEW.fov * i) / segments;
+    const current = guidePoint(angle, range);
+    points.push(previous, current);
+    previous = current;
+  }
+  return points;
 }
 
 function RoiBox({ marker }: { marker: RoiMarker }) {
@@ -126,15 +260,11 @@ function RoiBox({ marker }: { marker: RoiMarker }) {
   );
 }
 
-function cameraForMarkers(markers: RoiMarker[]) {
-  if (markers.length === 0) {
-    return { height: 10, x: 0, z: 0, zoom: 45 };
-  }
-
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minZ = Infinity;
-  let maxZ = -Infinity;
+function cameraForScene(markers: RoiMarker[], points: LidarPoint[]) {
+  let minX = -Math.sin(LIDAR_VIEW.fov / 2) * LIDAR_VIEW.range;
+  let maxX = Math.sin(LIDAR_VIEW.fov / 2) * LIDAR_VIEW.range;
+  let minZ = 0;
+  let maxZ = LIDAR_VIEW.range;
 
   for (const marker of markers) {
     const { position } = marker.pose;
@@ -143,6 +273,13 @@ function cameraForMarkers(markers: RoiMarker[]) {
     maxX = Math.max(maxX, position.x + scale.x / 2);
     minZ = Math.min(minZ, position.y - scale.y / 2);
     maxZ = Math.max(maxZ, position.y + scale.y / 2);
+  }
+
+  for (const point of points) {
+    minX = Math.min(minX, point.x);
+    maxX = Math.max(maxX, point.x);
+    minZ = Math.min(minZ, point.y);
+    maxZ = Math.max(maxZ, point.y);
   }
 
   const width = Math.max(maxX - minX, maxZ - minZ, 1);
