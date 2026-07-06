@@ -8,6 +8,12 @@ import {
 } from '@react-three/drei';
 import * as THREE from 'three';
 
+import {
+  rosSizeToSceneSize,
+  rosToScenePoint,
+  type RosVector3,
+} from '@/components/lidar-coordinates';
+
 export type RoiAlarm = {
   name: string;
   alarm: boolean;
@@ -19,18 +25,12 @@ export type RoiAlarmArray = {
   alarms: RoiAlarm[];
 };
 
-type Vector3Like = {
-  x: number;
-  y: number;
-  z: number;
-};
-
 export type RoiMarker = {
   id: number;
   pose: {
-    position: Vector3Like;
+    position: RosVector3;
   };
-  scale: Vector3Like;
+  scale: RosVector3;
   color: {
     r: number;
     g: number;
@@ -43,7 +43,7 @@ export type RoiMarkerArray = {
   markers: RoiMarker[];
 };
 
-export type LidarPoint = Vector3Like;
+export type LidarPoint = RosVector3;
 
 const LIDAR_VIEW = {
   range: 50,
@@ -122,6 +122,7 @@ function RoiScene({
         <GizmoHelper alignment="bottom-right" margin={[54, 54]}>
           <GizmoViewport
             axisColors={['#ff5c5c', '#23d77a', '#5c8dff']}
+            labels={['Y', 'Z', 'X']}
             labelColor="#f7fffb"
           />
         </GizmoHelper>
@@ -205,9 +206,10 @@ function PointCloud({ points }: { points: LidarPoint[] }) {
 
     for (let i = 0; i < points.length; i += step) {
       const point = points[i];
-      positions[offset] = point.y;
-      positions[offset + 1] = point.z;
-      positions[offset + 2] = point.x;
+      const [sceneX, sceneY, sceneZ] = rosToScenePoint(point);
+      positions[offset] = sceneX;
+      positions[offset + 1] = sceneY;
+      positions[offset + 2] = sceneZ;
       offset += 3;
     }
 
@@ -253,24 +255,27 @@ function arcPoints(range: number) {
 function RoiBox({ marker }: { marker: RoiMarker }) {
   const { position } = marker.pose;
   const { scale } = marker;
+  const { x: scaleX, y: scaleY, z: scaleZ } = scale;
   const geometry = useMemo(() => {
-    const box = new THREE.BoxGeometry(scale.y, scale.z, scale.x);
+    const box = new THREE.BoxGeometry(
+      ...rosSizeToSceneSize({ x: scaleX, y: scaleY, z: scaleZ }),
+    );
     return new THREE.EdgesGeometry(box);
-  }, [scale.x, scale.y, scale.z]);
+  }, [scaleX, scaleY, scaleZ]);
   const color = useMemo(
     () => new THREE.Color(marker.color.r, marker.color.g, marker.color.b),
     [marker.color.b, marker.color.g, marker.color.r],
   );
 
   return (
-    <group position={[position.y, position.z, position.x]}>
+    <group position={rosToScenePoint(position)}>
       <lineSegments geometry={geometry}>
         <lineBasicMaterial color={color} />
       </lineSegments>
-      <Html position={[0, scale.z / 2 + 0.12, 0]} center>
+      <Html position={[0, scaleZ / 2 + 0.12, 0]} center>
         <span className="roi-measure-label">
-          x {formatMeter(position.x - scale.x / 2)}-
-          {formatMeter(position.x + scale.x / 2)}m · 폭 {formatMeter(scale.y)}m
+          x {formatMeter(position.x - scaleX / 2)}-
+          {formatMeter(position.x + scaleX / 2)}m · 폭 {formatMeter(scaleY)}m
         </span>
       </Html>
     </group>
