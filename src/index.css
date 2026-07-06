@@ -323,6 +323,45 @@ canvas {
   background: #ff5c5c;
 }
 
+.alarm-screen-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  animation: alarm-screen-flash 0.9s ease-in-out infinite;
+}
+
+.alarm-screen-flash-red {
+  background: rgba(255, 92, 92, 0.38);
+}
+
+.alarm-screen-flash-yellow {
+  background: rgba(255, 184, 77, 0.34);
+}
+
+.alarm-screen-flash-green {
+  background: rgba(35, 215, 122, 0.22);
+}
+
+@keyframes alarm-screen-flash {
+  0%,
+  100% {
+    opacity: 0;
+  }
+
+  45%,
+  55% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .alarm-screen-flash {
+    animation: none;
+    opacity: 0.28;
+  }
+}
+
 .alarm-strip {
   display: flex;
   align-items: center;

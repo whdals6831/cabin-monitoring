@@ -19,19 +19,37 @@ type AlarmStripProps = {
 };
 
 export function AlarmStrip({ alarm, receivedLabel, topic }: AlarmStripProps) {
+  const alarmLevel = alarmColorLevel(alarm);
+  const isAlarmActive = alarm?.alarm === true;
+
   return (
-    <section className={`alarm-strip alarm-${alarm?.level ?? 'unknown'}`}>
-      <div>
-        <p className="panel-kicker">Alarm</p>
-        <h2>{alarmTitle(alarm)}</h2>
-      </div>
-      <div className="alarm-detail">
-        <span>{topic}</span>
-        <span>{alarmDescription(alarm)}</span>
-        <span>{receivedLabel}</span>
-      </div>
-    </section>
+    <>
+      {isAlarmActive ? (
+        <div
+          className={`alarm-screen-flash alarm-screen-flash-${alarmLevel}`}
+          aria-hidden="true"
+        />
+      ) : null}
+      <section className={`alarm-strip alarm-${alarmLevel}`}>
+        <div>
+          <p className="panel-kicker">Alarm</p>
+          <h2>{alarmTitle(alarm)}</h2>
+        </div>
+        <div className="alarm-detail">
+          <span>{topic}</span>
+          <span>{alarmDescription(alarm)}</span>
+          <span>{receivedLabel}</span>
+        </div>
+      </section>
+    </>
   );
+}
+
+function alarmColorLevel(alarm: MonitoringAlarm | null) {
+  if (alarm?.level === 'red' || alarm?.level === 'yellow') {
+    return alarm.level;
+  }
+  return 'green';
 }
 
 function alarmTitle(alarm: MonitoringAlarm | null) {
